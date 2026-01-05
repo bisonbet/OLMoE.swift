@@ -1,16 +1,6 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "%@ / %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ / %2$@"
-          }
-        }
-      }
-    },
     "%d input" : {
 
     },
@@ -29,7 +19,13 @@
     "⚠️ Running on AI2's servers - not on your device" : {
 
     },
+    "Are you sure you want to delete %@? You can download it again later." : {
+
+    },
     "Cancel" : {
+
+    },
+    "Choose which AI model to use. Models are downloaded once and run locally on your device." : {
 
     },
     "Clear" : {
@@ -44,10 +40,19 @@
     "Copy Code" : {
 
     },
+    "Delete" : {
+
+    },
+    "Delete Model?" : {
+
+    },
     "Device not supported" : {
 
     },
-    "Download Model" : {
+    "Download" : {
+
+    },
+    "Download %@" : {
 
     },
     "Download Model Message" : {
@@ -61,9 +66,6 @@
         }
       }
     },
-    "Downloading..." : {
-
-    },
     "Empty Input Prompt" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -74,9 +76,6 @@
           }
         }
       }
-    },
-    "Flush Model" : {
-
     },
     "However, you can try using OLMoE at the Ai2 Playground. This option does not download the model file to your device, but instead submits user input to a hosted version of OLMoE to remotely generate responses." : {
 
@@ -103,9 +102,6 @@
         }
       }
     },
-    "Model is ready to use!" : {
-
-    },
     "OLMoE can run locally on iPhone 15 Pro/Max, iPhone 16 models, iPad Pro 4th Gen and newer, or iPad Air 5th Gen and newer." : {
 
     },
@@ -118,13 +114,13 @@
     "Sample conversation area" : {
 
     },
+    "Select a Model" : {
+
+    },
     "Start Download" : {
 
     },
     "Tap the metrics button in the toolbar to toggle metrics visibility." : {
-
-    },
-    "The model requires 4.21GB of storage space. Would you like to proceed with the download?" : {
 
     },
     "This app needs 8GB of RAM." : {
@@ -133,13 +129,16 @@
     "This device has %@GB available." : {
 
     },
+    "This model requires %@ of storage space. Would you like to proceed with the download?" : {
+
+    },
     "Tokens:" : {
 
     },
     "Try OLMoE at the Ai2 Playground" : {
 
     },
-    "Welcome" : {
+    "Use" : {
 
     },
     "Welcome chat message" : {

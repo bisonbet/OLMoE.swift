@@ -10,9 +10,15 @@ import SwiftUI
 import os
 
 class Bot: LLM {
+    /// Legacy accessor for backward compatibility
     static let modelFileURL = URL.modelsDirectory.appendingPathComponent(AppConstants.Model.filename).appendingPathExtension("gguf")
 
-    convenience init() {
+    /// The model info this bot is using
+    private(set) var modelInfo: ModelInfo
+
+    /// Creates a Bot with the specified model
+    /// - Parameter model: The model configuration to use
+    init(model: ModelInfo) {
         let deviceName = UIDevice.current.model
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "MMMM d, yyyy"
@@ -22,14 +28,43 @@ class Bot: LLM {
         timeFormatter.dateFormat = "h:mm a"
         let currentTime = timeFormatter.string(from: Date())
 
-        let systemPrompt = "You are OLMoE (Open Language Mixture of Expert), a small language model running on \(deviceName). You have been developed at the Allen Institute for AI (Ai2) in Seattle, WA, USA. Today is \(currentDate). The time is \(currentTime)."
-
-        guard FileManager.default.fileExists(atPath: Bot.modelFileURL.path) else {
+        guard FileManager.default.fileExists(atPath: model.fileURL.path) else {
             fatalError("Model file not found. Please download it first.")
         }
 
-//        self.init(from: Bot.modelFileURL, template: .OLMoE(systemPrompt))
-        self.init(from: Bot.modelFileURL, template: .OLMoE())
+        // Create appropriate template based on model type
+        let template: Template
+        switch model.templateType {
+        case .olmoe:
+            let systemPrompt = "You are OLMoE (Open Language Mixture of Expert), a small language model running on \(deviceName). You have been developed at the Allen Institute for AI (Ai2) in Seattle, WA, USA. Today is \(currentDate). The time is \(currentTime)."
+            template = .OLMoE(systemPrompt)
+        case .phi3:
+            let systemPrompt = "You are MediPhi, a medical domain AI assistant running on \(deviceName). You provide helpful, accurate medical information while reminding users to consult healthcare professionals for medical advice. Today is \(currentDate). The time is \(currentTime)."
+            template = .phi3(systemPrompt)
+        }
+
+        self.modelInfo = model
+
+        // Call the designated initializer of LLM
+        super.init(
+            from: model.fileURL.path,
+            stopSequence: template.stopSequence,
+            history: [],
+            topK: 40,
+            topP: 0.95,
+            temp: 0.8,
+            maxTokenCount: 2048
+        )
+
+        // Set up template after super.init
+        self.preprocess = template.preprocess
+        self.template = template
+    }
+
+    /// Creates a Bot with the default/selected model from download manager
+    convenience init() {
+        let downloadManager = BackgroundDownloadManager.shared
+        self.init(model: downloadManager.selectedModel)
     }
 }
 
@@ -120,26 +155,26 @@ struct BotView: View {
     }
 
     private func formatConversationForSharing() -> String {
-        let deviceName = UIDevice.current.model
+        let modelName = bot.modelInfo.displayName
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "MMMM d, yyyy 'at' h:mm a"
         let timestamp = dateFormatter.string(from: Date())
 
         let header = """
-        Conversation with OLMoE (Open Language Mixture of Expert)
+        Conversation with \(modelName)
         ----------------------------------------
 
         """
 
         let conversation = bot.history.map { chat in
-            let role = chat.role == .user ? "User" : "OLMoE"
+            let role = chat.role == .user ? "User" : modelName
             return "\(role): \(chat.content)"
         }.joined(separator: "\n\n")
 
         let footer = """
 
         ----------------------------------------
-        Shared from OLMoE - AI2's Open Language Model
+        Shared from OLMoE.swift - AI2's On-Device Language Model App
         https://github.com/allenai/OLMoE
         """
 
@@ -157,7 +192,7 @@ struct BotView: View {
                 let apiKey = Configuration.apiKey
                 let apiUrl = Configuration.apiUrl
 
-                let modelName = AppConstants.Model.filename
+                let modelName = bot.modelInfo.filename
                 let systemFingerprint = "\(modelName)-\(AppInfo.shared.appId)"
 
                 let messages = bot.history.map { chat in
@@ -445,6 +480,14 @@ struct ContentView: View {
                         initializeBot()
                     }
                 }
+                .onChange(of: downloadManager.selectedModel) { newModel in
+                    // Reinitialize bot when user selects a different model
+                    if downloadManager.isModelReady && newModel.isDownloaded {
+                        if bot?.modelInfo.id != newModel.id {
+                            initializeBot()
+                        }
+                    }
+                }
                 .onAppear {
                     checkModelAndInitializeBot()
                 }
@@ -502,23 +545,17 @@ struct ContentView: View {
         }
     }
 
-    /// Checks if the model exists before initializing the bot
+    /// Checks if any model exists before initializing the bot
     private func checkModelAndInitializeBot() {
-        if FileManager.default.fileExists(atPath: Bot.modelFileURL.path) {
-            downloadManager.isModelReady = true
+        downloadManager.refreshModelStatus()
+        if downloadManager.isModelReady {
             initializeBot()
-        } else {
-            downloadManager.isModelReady = false
         }
     }
 
     /// Initializes the bot instance and sets the loopback test response flag.
     private func initializeBot() {
-        do {
-            bot = try Bot()
-            bot?.loopBackTestResponse = useMockedModelResponse
-        } catch {
-            print("Error initializing bot: \(error)")
-        }
+        bot = Bot(model: downloadManager.selectedModel)
+        bot?.loopBackTestResponse = useMockedModelResponse
     }
 }

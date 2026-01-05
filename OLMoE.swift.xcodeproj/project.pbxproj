@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		14711DB62F0B5E6D0051E8FB /* llama 2.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 14711DB42F0B5E410051E8FB /* llama 2.xcframework */; };
+		14711DB72F0B5E6D0051E8FB /* llama 2.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 14711DB42F0B5E410051E8FB /* llama 2.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		48779B152D80A17200C446E8 /* HighlightSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 48779B142D80A17200C446E8 /* HighlightSwift */; };
 		4885754D2D77756600F7A36F /* InferenceMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4885754C2D77756300F7A36F /* InferenceMetrics.swift */; };
 		48952DF02D4D69D400476373 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 48952DEF2D4D69D400476373 /* MarkdownUI */; };
@@ -18,7 +20,6 @@
 		A0117FEC2C990EAB00035007 /* OLMoE_swiftApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0117FEB2C990EAB00035007 /* OLMoE_swiftApp.swift */; };
 		A0117FF02C990EAC00035007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A0117FEF2C990EAC00035007 /* Assets.xcassets */; };
 		A0117FF42C990EAC00035007 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A0117FF32C990EAC00035007 /* Preview Assets.xcassets */; };
-		A0117FFF2C990F5600035007 /* llama in Frameworks */ = {isa = PBXBuildFile; productRef = A0117FFE2C990F5600035007 /* llama */; };
 		A01180012C990F7600035007 /* LLM.swift in Sources */ = {isa = PBXBuildFile; fileRef = A01180002C990F7600035007 /* LLM.swift */; };
 		A046603D2CA3FAFA007BD14C /* Configuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A046603C2CA3FAFA007BD14C /* Configuration.swift */; };
 		A046603F2CA400D2007BD14C /* AppInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A046603E2CA400D2007BD14C /* AppInfo.swift */; };
@@ -31,7 +32,22 @@
 		B26FDB5E2CEAD5CB00E1D57C /* Model.swift in Sources */ = {isa = PBXBuildFile; fileRef = B26FDB5D2CEAD5CB00E1D57C /* Model.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		14711DB82F0B5E6D0051E8FB /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				14711DB72F0B5E6D0051E8FB /* llama 2.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		14711DB42F0B5E410051E8FB /* llama 2.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = "llama 2.xcframework"; sourceTree = "<group>"; };
 		48194C372D14D7C500E76532 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		4877E8992D7A4DB200C446E8 /* OLMoE_swift_macCatalyst.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = OLMoE_swift_macCatalyst.entitlements; sourceTree = "<group>"; };
 		4885754C2D77756300F7A36F /* InferenceMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceMetrics.swift; sourceTree = "<group>"; };
@@ -58,10 +74,21 @@
 		B26FDB5D2CEAD5CB00E1D57C /* Model.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Model.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		14AB742F2F0B535E006F5EB7 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				build.example.xcconfig,
+				"project-defaults.xcconfig",
+			);
+			target = A0117FE72C990EAB00035007 /* OLMoE.swift */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		48188E282CEE676800B0EF03 /* Styles */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Styles; sourceTree = "<group>"; };
 		48194C362D14D69300E76532 /* doc_assets */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = doc_assets; sourceTree = "<group>"; };
-		487932D72CEBB63D00A741C5 /* BuildConfig */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = BuildConfig; sourceTree = "<group>"; };
+		487932D72CEBB63D00A741C5 /* BuildConfig */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (14AB742F2F0B535E006F5EB7 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = BuildConfig; sourceTree = "<group>"; };
 		48971DFB2D14D5E300F0DB43 /* aws-lambda */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = "aws-lambda"; sourceTree = "<group>"; };
 		48AA86D92CE688A4000B9138 /* Constants */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Constants; sourceTree = "<group>"; };
 		48AA86DF2CE69622000B9138 /* Extensions */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Extensions; sourceTree = "<group>"; };
@@ -74,8 +101,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				14711DB62F0B5E6D0051E8FB /* llama 2.xcframework in Frameworks */,
 				48779B152D80A17200C446E8 /* HighlightSwift in Frameworks */,
-				A0117FFF2C990F5600035007 /* llama in Frameworks */,
 				48952DF02D4D69D400476373 /* MarkdownUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -92,6 +119,7 @@
 				A0117FEA2C990EAB00035007 /* OLMoE.swift */,
 				A0117FE92C990EAB00035007 /* Products */,
 				58A7F8BB2D4C16F20041AA70 /* LICENSE */,
+				14711DB42F0B5E410051E8FB /* llama 2.xcframework */,
 			);
 			sourceTree = "<group>";
 		};
@@ -163,6 +191,7 @@
 				A0117FE42C990EAB00035007 /* Sources */,
 				A0117FE52C990EAB00035007 /* Frameworks */,
 				A0117FE62C990EAB00035007 /* Resources */,
+				14711DB82F0B5E6D0051E8FB /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -178,7 +207,6 @@
 			);
 			name = OLMoE.swift;
 			packageProductDependencies = (
-				A0117FFE2C990F5600035007 /* llama */,
 				48952DEF2D4D69D400476373 /* MarkdownUI */,
 				48779B142D80A17200C446E8 /* HighlightSwift */,
 			);
@@ -197,7 +225,7 @@
 					New,
 				);
 				LastSwiftUpdateCheck = 1540;
-				LastUpgradeCheck = 1540;
+				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					A0117FE72C990EAB00035007 = {
 						CreatedOnToolsVersion = 15.4;
@@ -214,7 +242,6 @@
 			);
 			mainGroup = A0117FDF2C990EAB00035007;
 			packageReferences = (
-				A0117FFD2C990F5600035007 /* XCRemoteSwiftPackageReference "llama" */,
 				48952DEE2D4D69D400476373 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 				48779B132D80A17200C446E8 /* XCRemoteSwiftPackageReference "HighlightSwift" */,
 			);
@@ -304,6 +331,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_IDENTITY = "-";
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -326,6 +354,7 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -368,6 +397,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -383,6 +413,7 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 			};
@@ -399,17 +430,22 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphone*]" = OLMoE.swift/OLMoE_swift.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = OLMoE.swift/OLMoE_swift_macCatalyst.entitlements;
 				CODE_SIGN_IDENTITY = "-";
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "-";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "${BUNDLE_VERSION}";
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"OLMoE.swift/Preview Content\"";
-				DEVELOPMENT_TEAM = "${DEVELOPMENT_TEAM_ID}";
+				DEVELOPMENT_TEAM = 4W55VW7UXX;
+				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "OLMoE-swift-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Ai2 OLMoE";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -454,13 +490,18 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = "${BUNDLE_VERSION}";
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"OLMoE.swift/Preview Content\"";
 				DEVELOPMENT_TEAM = "${DEVELOPMENT_TEAM_ID}";
+				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "OLMoE-swift-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Ai2 OLMoE";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -518,8 +559,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/appstefan/HighlightSwift";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.0.9;
+				branch = main;
+				kind = branch;
 			};
 		};
 		48952DEE2D4D69D400476373 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
@@ -528,14 +569,6 @@
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 2.4.1;
-			};
-		};
-		A0117FFD2C990F5600035007 /* XCRemoteSwiftPackageReference "llama" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ggerganov/llama.cpp/";
-			requirement = {
-				kind = revision;
-				revision = cc98896db858df7aa40d0e16a505883ef196a482;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -550,11 +583,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 48952DEE2D4D69D400476373 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
 			productName = MarkdownUI;
-		};
-		A0117FFE2C990F5600035007 /* llama */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A0117FFD2C990F5600035007 /* XCRemoteSwiftPackageReference "llama" */;
-			productName = llama;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

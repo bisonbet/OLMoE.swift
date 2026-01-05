@@ -168,4 +168,17 @@ public struct Template {
         stopSequence: "</s>",
         systemPrompt: nil
     )
+
+    /// Creates a template for Phi-3 style models (used by MediPhi)
+    /// - Parameter systemPrompt: Optional system message for context
+    /// - Returns: Template configured for Phi-3 format
+    public static func phi3(_ systemPrompt: String? = nil) -> Template {
+        return Template(
+            system: ("<|system|>\n", "<|end|>\n"),
+            user: ("<|user|>\n", "<|end|>\n"),
+            bot: ("<|assistant|>\n", "<|end|>\n"),
+            stopSequence: "<|end|>",
+            systemPrompt: systemPrompt
+        )
+    }
 }

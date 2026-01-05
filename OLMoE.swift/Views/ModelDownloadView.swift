@@ -24,6 +24,8 @@ class BackgroundDownloadManager: NSObject, ObservableObject, URLSessionDownloadD
     @Published var isModelReady = false
     @Published var downloadedSize: Int64 = 0
     @Published var totalSize: Int64 = 0
+    @Published var selectedModel: ModelInfo = AppConstants.Models.defaultModel
+    @Published var currentlyDownloadingModel: ModelInfo?
 
     private var networkMonitor: NWPathMonitor?
     private var backgroundSession: URLSession!
@@ -35,16 +37,13 @@ class BackgroundDownloadManager: NSObject, ObservableObject, URLSessionDownloadD
 
     private override init() {
         super.init()
-        #if targetEnvironment(macCatalyst)
-        // Use regular session for Mac Catalyst
-        backgroundSession = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
-        #else
-        // Use background session for iOS
-        let config = URLSessionConfiguration.background(withIdentifier: "ai.olmo.OLMoE.backgroundDownload")
-        config.isDiscretionary = false
-        config.sessionSendsLaunchEvents = true
+        // Use regular foreground session for faster downloads
+        // Background sessions let the system throttle which causes slow, spiky downloads
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 60
+        config.timeoutIntervalForResource = 3600 // 1 hour for large downloads
+        config.waitsForConnectivity = true
         backgroundSession = URLSession(configuration: config, delegate: self, delegateQueue: nil)
-        #endif
 
         startNetworkMonitoring()
     }
@@ -68,22 +67,54 @@ class BackgroundDownloadManager: NSObject, ObservableObject, URLSessionDownloadD
         networkMonitor?.start(queue: queue)
     }
 
-    /// Starts the download process.
-    func startDownload() {
+    /// Starts the download process for a specific model.
+    /// - Parameter model: The model to download. If nil, downloads the selected model.
+    func startDownload(for model: ModelInfo? = nil) {
         if networkMonitor?.currentPath.status == .unsatisfied {
+            DispatchQueue.main.async {
+                self.downloadError = "No network connection available. Please check your internet connection."
+            }
             return
         }
 
-        guard let url = URL(string: AppConstants.Model.downloadURL) else { return }
+        let modelToDownload = model ?? selectedModel
+        guard let url = URL(string: modelToDownload.downloadURL) else {
+            DispatchQueue.main.async {
+                self.downloadError = "Invalid download URL for \(modelToDownload.displayName)"
+            }
+            return
+        }
 
-        isDownloading = true
-        downloadError = nil
-        downloadedSize = 0
-        totalSize = 0
-        self.lastDispatchedBytesWritten = 0
+        print("[Download] Starting download for \(modelToDownload.displayName)")
+        print("[Download] URL: \(url)")
 
-        downloadTask = backgroundSession.downloadTask(with: url)
+        // Cancel any existing download task
+        downloadTask?.cancel()
+
+        DispatchQueue.main.async {
+            self.currentlyDownloadingModel = modelToDownload
+            self.isDownloading = true
+            self.downloadError = nil
+            self.downloadedSize = 0
+            self.totalSize = 0
+            self.lastDispatchedBytesWritten = 0
+            self.hasCheckedDiskSpace = false
+        }
+
+        // Create a URL request with proper headers
+        var request = URLRequest(url: url)
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
+        request.setValue("*/*", forHTTPHeaderField: "Accept")
+
+        downloadTask = backgroundSession.downloadTask(with: request)
         downloadTask?.resume()
+
+        print("[Download] Task started, state: \(downloadTask?.state.rawValue ?? -1)")
+    }
+
+    /// Legacy method for backward compatibility
+    func startDownload() {
+        startDownload(for: nil)
     }
 
     /// Handles the completion of the download task.
@@ -92,21 +123,37 @@ class BackgroundDownloadManager: NSObject, ObservableObject, URLSessionDownloadD
     ///   - downloadTask: The download task that completed.
     ///   - location: The temporary location of the downloaded file.
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        let destination = Bot.modelFileURL
+        let model = currentlyDownloadingModel ?? selectedModel
+        let destination = model.fileURL
+
+        print("[Download] Finished! Temp location: \(location)")
+        print("[Download] Moving to: \(destination)")
 
         do {
+            // Ensure models directory exists
+            try FileManager.default.createDirectory(at: URL.modelsDirectory, withIntermediateDirectories: true)
+
             if FileManager.default.fileExists(atPath: destination.path) {
                 try FileManager.default.removeItem(at: destination)
             }
             try FileManager.default.moveItem(at: location, to: destination)
+
+            // Verify the file was saved correctly
+            let fileSize = try FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? Int64 ?? 0
+            print("[Download] File saved successfully. Size: \(formatSize(fileSize))")
+
             DispatchQueue.main.async {
+                self.selectedModel = model
                 self.isModelReady = true
                 self.isDownloading = false
+                self.currentlyDownloadingModel = nil
             }
         } catch {
+            print("[Download] Failed to save file: \(error)")
             DispatchQueue.main.async {
                 self.downloadError = "Failed to save file: \(error.localizedDescription)"
                 self.isDownloading = false
+                self.currentlyDownloadingModel = nil
             }
         }
     }
@@ -117,6 +164,22 @@ class BackgroundDownloadManager: NSObject, ObservableObject, URLSessionDownloadD
     ///   - task: The task that completed.
     ///   - error: The error that occurred, if any.
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        print("[Download] Task completed. Error: \(error?.localizedDescription ?? "none")")
+        print("[Download] Task state: \(task.state.rawValue), Response: \(String(describing: task.response))")
+
+        if let httpResponse = task.response as? HTTPURLResponse {
+            print("[Download] HTTP Status: \(httpResponse.statusCode)")
+            if httpResponse.statusCode != 200 {
+                DispatchQueue.main.async {
+                    self.downloadError = "Server returned status \(httpResponse.statusCode)"
+                    self.isDownloading = false
+                    self.hasCheckedDiskSpace = false
+                    self.currentlyDownloadingModel = nil
+                }
+                return
+            }
+        }
+
         DispatchQueue.main.async {
             if let error = error {
                 if self.downloadError == nil {
@@ -124,8 +187,22 @@ class BackgroundDownloadManager: NSObject, ObservableObject, URLSessionDownloadD
                 }
                 self.isDownloading = false
                 self.hasCheckedDiskSpace = false
+                self.currentlyDownloadingModel = nil
             }
         }
+    }
+
+    /// Handles HTTP redirects
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        print("[Download] Redirect to: \(request.url?.absoluteString ?? "unknown")")
+        // Allow the redirect
+        completionHandler(request)
+    }
+
+    /// Handles authentication challenges (e.g., from CDN)
+    func urlSession(_ session: URLSession, task: URLSessionTask, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        print("[Download] Auth challenge: \(challenge.protectionSpace.authenticationMethod)")
+        completionHandler(.performDefaultHandling, nil)
     }
 
     /// Updates the download progress and checks for disk space during the download.
@@ -148,27 +225,64 @@ class BackgroundDownloadManager: NSObject, ObservableObject, URLSessionDownloadD
         }
 
         let currentTime = Date()
-        if currentTime.timeIntervalSince(lastUpdateTime) >= updateInterval {
-            DispatchQueue.main.async {
-                // Due to async nature, older updates might run later; update progress only if data is more recent.
-                guard totalBytesWritten > self.lastDispatchedBytesWritten else { return }
-                self.lastDispatchedBytesWritten = totalBytesWritten
+        // Update lastUpdateTime immediately to prevent race condition
+        guard currentTime.timeIntervalSince(lastUpdateTime) >= updateInterval else { return }
+        lastUpdateTime = currentTime
 
-                self.downloadProgress = Float(totalBytesWritten) / Float(totalBytesExpectedToWrite)
-                self.downloadedSize = totalBytesWritten
-                self.totalSize = totalBytesExpectedToWrite
-                self.lastUpdateTime = currentTime
-            }
+        // Check if this update has newer data than what we've already dispatched
+        guard totalBytesWritten > lastDispatchedBytesWritten else { return }
+        lastDispatchedBytesWritten = totalBytesWritten
+
+        DispatchQueue.main.async {
+            self.downloadProgress = Float(totalBytesWritten) / Float(totalBytesExpectedToWrite)
+            self.downloadedSize = totalBytesWritten
+            self.totalSize = totalBytesExpectedToWrite
         }
     }
 
-    /// Deletes the downloaded model file, marking it as not ready.
-    func flushModel() {
+    /// Deletes the downloaded model file for a specific model.
+    /// - Parameter model: The model to delete. If nil, deletes the selected model.
+    func flushModel(_ model: ModelInfo? = nil) {
+        let modelToFlush = model ?? selectedModel
         do {
-            try FileManager.default.removeItem(at: Bot.modelFileURL)
-            isModelReady = false
+            if FileManager.default.fileExists(atPath: modelToFlush.fileURL.path) {
+                try FileManager.default.removeItem(at: modelToFlush.fileURL)
+            }
+            // Check if any model is still available
+            let anyModelReady = AppConstants.Models.all.contains { $0.isDownloaded }
+            if !anyModelReady {
+                isModelReady = false
+            } else if modelToFlush.id == selectedModel.id {
+                // If we deleted the selected model, switch to another available one
+                if let availableModel = AppConstants.Models.all.first(where: { $0.isDownloaded }) {
+                    selectedModel = availableModel
+                } else {
+                    isModelReady = false
+                }
+            }
         } catch {
             downloadError = "Failed to flush model: \(error.localizedDescription)"
+        }
+    }
+
+    /// Selects a model to use (must be already downloaded)
+    /// - Parameter model: The model to select
+    func selectModel(_ model: ModelInfo) {
+        guard model.isDownloaded else { return }
+        selectedModel = model
+        isModelReady = true
+    }
+
+    /// Checks which models are downloaded and updates state accordingly
+    func refreshModelStatus() {
+        // Check if selected model is still available
+        if selectedModel.isDownloaded {
+            isModelReady = true
+        } else if let availableModel = AppConstants.Models.all.first(where: { $0.isDownloaded }) {
+            selectedModel = availableModel
+            isModelReady = true
+        } else {
+            isModelReady = false
         }
     }
 
@@ -189,108 +303,201 @@ class BackgroundDownloadManager: NSObject, ObservableObject, URLSessionDownloadD
     }
 }
 
-/// A view that displays the model download progress and status.
+/// A row view for displaying a single model option
+struct ModelRowView: View {
+    let model: ModelInfo
+    let isSelected: Bool
+    let isDownloading: Bool
+    let downloadProgress: Float
+    let onDownload: () -> Void
+    let onSelect: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(model.displayName)
+                        .font(.telegraf(.medium, size: 20))
+                        .foregroundColor(Color("TextColor"))
+
+                    Text(model.description)
+                        .font(.body(.regular))
+                        .foregroundColor(Color("TextColor").opacity(0.7))
+                        .lineLimit(2)
+                }
+
+                Spacer()
+
+                if model.isDownloaded {
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(Color("AccentColor"))
+                            .font(.title2)
+                    } else {
+                        Button(action: onSelect) {
+                            Text("Use")
+                                .font(.body())
+                        }
+                        .buttonStyle(.PrimaryButton)
+                    }
+                }
+            }
+
+            HStack {
+                Text(model.downloadSize)
+                    .font(.caption)
+                    .foregroundColor(Color("TextColor").opacity(0.6))
+
+                Spacer()
+
+                if isDownloading {
+                    ProgressView(value: downloadProgress, total: 1.0)
+                        .progressViewStyle(LinearProgressViewStyle())
+                        .frame(width: 100)
+                    Text("\(Int(downloadProgress * 100))%")
+                        .font(.caption)
+                        .foregroundColor(Color("TextColor"))
+                } else if model.isDownloaded {
+                    Button(action: onDelete) {
+                        Image(systemName: "trash")
+                            .foregroundColor(.red.opacity(0.7))
+                    }
+                    .buttonStyle(.borderless)
+                } else {
+                    Button(action: onDownload) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.down.circle")
+                            Text("Download")
+                        }
+                        .font(.body())
+                    }
+                    .buttonStyle(.PrimaryButton)
+                }
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(isSelected ? Color("AccentColor").opacity(0.1) : Color("BackgroundColor"))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(isSelected ? Color("AccentColor") : Color("DividerTeal"), lineWidth: isSelected ? 2 : 1)
+                )
+        )
+    }
+}
+
+/// A view that displays the model selection and download interface.
 struct ModelDownloadView: View {
     @StateObject private var downloadManager = BackgroundDownloadManager.shared
-    @State private var showDownloadConfirmation = false
+    @State private var modelToDownload: ModelInfo?
+    @State private var modelToDelete: ModelInfo?
+    @State private var showDeleteConfirmation = false
 
     public var body: some View {
         ZStack {
             Color("BackgroundColor")
                 .edgesIgnoringSafeArea(.all)
 
-            VStack(spacing: 40) {
-                if downloadManager.isModelReady {
-                    Text("Model is ready to use!")
-                        .foregroundColor(Color("TextColor"))
-                        .font(.title())
-                    Button("Flush Model", action: downloadManager.flushModel)
-                        .buttonStyle(.PrimaryButton)
-                } else if downloadManager.isDownloading {
-                    ProgressView("Downloading...", value: downloadManager.downloadProgress, total: 1.0)
-                        .progressViewStyle(LinearProgressViewStyle())
-                        .padding()
-                        .foregroundColor(Color("TextColor"))
-                        .font(.body())
-                    HStack {
-                        Text("\(Int(downloadManager.downloadProgress * 100))%")
-                            .foregroundColor(Color("TextColor"))
-                            .font(.body())
+            VStack(spacing: 24) {
+                Text("Select a Model")
+                    .font(.telegraf(.medium, size: 32))
+                    .foregroundColor(Color("TextColor"))
 
-                        Divider()
-                            .frame(height: 20)
-                            .background(Color("DividerTeal"))
+                Text("Choose which AI model to use. Models are downloaded once and run locally on your device.")
+                    .multilineTextAlignment(.center)
+                    .font(.body(.regular))
+                    .foregroundColor(Color("TextColor").opacity(0.8))
+                    .padding(.horizontal)
 
-                        Text("\(formatSize(downloadManager.downloadedSize)) / \(formatSize(downloadManager.totalSize))")
-                            .foregroundColor(Color("TextColor"))
-                            .font(.body())
-                    }
-                } else {
-                    Text("Welcome")
-                        .font(.telegraf(.medium, size: 40))
-
-                    Text("Download Model Message")
-                        .multilineTextAlignment(.center)
-                        .font(.body(.regular))
-                        .padding([.bottom], 4)
-
-                    Button(action: { showDownloadConfirmation = true }) {
-                        Image("DownloadIcon")
-                    }
-                    .buttonStyle(.borderless)
-                    .buttonStyle(.PrimaryButton)
-                    .sheet(isPresented: $showDownloadConfirmation) {
-                        SheetWrapper {
-                            HStack {
-                                Spacer()
-                                CloseButton(action: { showDownloadConfirmation = false })
-                            }
-                            Spacer()
-                            VStack(spacing: 20) {
-                                Text("Download Model")
-                                    .font(.title())
-
-                                Text("The model requires 4.21GB of storage space. Would you like to proceed with the download?")
-                                    .multilineTextAlignment(.center)
-                                    .font(.body())
-
-                                VStack(spacing: 12) {
-                                    Button {
-                                        showDownloadConfirmation = false
-                                        downloadManager.startDownload()
-                                    } label: {
-                                        HStack {
-                                            Image(systemName: "arrow.down.circle.fill")
-                                            Text("Start Download")
-                                        }
-                                    }
-                                    .buttonStyle(.PrimaryButton)
+                ScrollView {
+                    VStack(spacing: 16) {
+                        ForEach(AppConstants.Models.all) { model in
+                            ModelRowView(
+                                model: model,
+                                isSelected: downloadManager.selectedModel.id == model.id && model.isDownloaded,
+                                isDownloading: downloadManager.isDownloading && downloadManager.currentlyDownloadingModel?.id == model.id,
+                                downloadProgress: downloadManager.downloadProgress,
+                                onDownload: {
+                                    modelToDownload = model
+                                },
+                                onSelect: {
+                                    downloadManager.selectModel(model)
+                                },
+                                onDelete: {
+                                    modelToDelete = model
+                                    showDeleteConfirmation = true
                                 }
-                            }
-                                .padding()
-                            Spacer()
+                            )
                         }
                     }
+                    .padding(.horizontal)
                 }
 
                 if let error = downloadManager.downloadError {
                     Text(error)
                         .foregroundColor(.red)
+                        .font(.caption)
                         .padding()
                 }
-            }
-            .padding()
 
-            Ai2LogoView(applyMacCatalystPadding: true)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                Spacer()
+
+                Ai2LogoView(applyMacCatalystPadding: true)
+            }
+            .padding(.top, 40)
+        }
+        .sheet(item: $modelToDownload) { model in
+            SheetWrapper {
+                HStack {
+                    Spacer()
+                    CloseButton(action: { modelToDownload = nil })
+                }
+                Spacer()
+                VStack(spacing: 20) {
+                    Text("Download \(model.displayName)")
+                        .font(.title())
+
+                    Text("This model requires \(model.downloadSize) of storage space. Would you like to proceed with the download?")
+                        .multilineTextAlignment(.center)
+                        .font(.body())
+
+                    VStack(spacing: 12) {
+                        Button {
+                            let modelToStart = model
+                            modelToDownload = nil
+                            downloadManager.startDownload(for: modelToStart)
+                        } label: {
+                            HStack {
+                                Image(systemName: "arrow.down.circle.fill")
+                                Text("Start Download")
+                            }
+                        }
+                        .buttonStyle(.PrimaryButton)
+                    }
+                }
+                .padding()
+                Spacer()
+            }
+        }
+        .alert("Delete Model?", isPresented: $showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) {
+                modelToDelete = nil
+            }
+            Button("Delete", role: .destructive) {
+                if let model = modelToDelete {
+                    downloadManager.flushModel(model)
+                }
+                modelToDelete = nil
+            }
+        } message: {
+            if let model = modelToDelete {
+                Text("Are you sure you want to delete \(model.displayName)? You can download it again later.")
+            }
         }
         .onAppear {
-            if FileManager.default.fileExists(atPath: Bot.modelFileURL.path) {
-                downloadManager.isModelReady = true
-            } else {
-                // Model file doesn't exist, make sure isModelReady is false
-                downloadManager.isModelReady = false
-            }
+            downloadManager.refreshModelStatus()
         }
     }
 }

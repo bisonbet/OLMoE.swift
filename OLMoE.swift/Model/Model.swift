@@ -10,18 +10,21 @@ import Foundation
 import llama
 
 extension Model {
+    /// Get the vocabulary from this model
+    private var vocab: OpaquePointer { llama_model_get_vocab(self)! }
+
     /// Token representing the end of sequence
-    public var endToken: Token { llama_token_eos(self) }
+    public var endToken: Token { llama_vocab_eos(vocab) }
 
     /// Token representing a newline character
-    public var newLineToken: Token { llama_token_nl(self) }
+    public var newLineToken: Token { llama_vocab_nl(vocab) }
 
     /// Determines whether Beginning-of-Sequence (BOS) token should be added
     /// - Returns: True if BOS token should be added, based on model vocabulary type
     public func shouldAddBOS() -> Bool {
-        let addBOS = llama_add_bos_token(self);
+        let addBOS = llama_vocab_get_add_bos(vocab);
         guard !addBOS else {
-            return llama_vocab_type(self) == LLAMA_VOCAB_TYPE_SPM
+            return llama_vocab_type(vocab) == LLAMA_VOCAB_TYPE_SPM
         }
         return addBOS
     }
@@ -42,12 +45,12 @@ extension Model {
     public func decode(_ token: Token, with multibyteCharacter: inout [CUnsignedChar]) -> String {
         var bufferLength = 16
         var buffer: [CChar] = .init(repeating: 0, count: bufferLength)
-        let actualLength = Int(llama_token_to_piece(self, token, &buffer, Int32(bufferLength), 0, false))
+        let actualLength = Int(llama_token_to_piece(vocab, token, &buffer, Int32(bufferLength), 0, false))
         guard 0 != actualLength else { return "" }
         if actualLength < 0 {
             bufferLength = -actualLength
             buffer = .init(repeating: 0, count: bufferLength)
-            llama_token_to_piece(self, token, &buffer, Int32(bufferLength), 0, false)
+            llama_token_to_piece(vocab, token, &buffer, Int32(bufferLength), 0, false)
         } else {
             buffer.removeLast(bufferLength - actualLength)
         }
@@ -70,7 +73,7 @@ extension Model {
         let count = Int32(text.cString(using: .utf8)!.count)
         var tokenCount = count + 1
         let cTokens = UnsafeMutablePointer<llama_token>.allocate(capacity: Int(tokenCount)); defer { cTokens.deallocate() }
-        tokenCount = llama_tokenize(self, text, count, cTokens, tokenCount, addBOS, false)
+        tokenCount = llama_tokenize(vocab, text, count, cTokens, tokenCount, addBOS, false)
         let tokens = (0..<Int(tokenCount)).map { cTokens[$0] }
 
         print("Encoded tokens: \(tokens)")  // Add this line to log the resulting tokens
