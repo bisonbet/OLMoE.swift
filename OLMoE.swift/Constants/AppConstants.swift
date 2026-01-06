@@ -14,6 +14,7 @@ struct ModelInfo: Identifiable, Equatable, Codable {
     enum TemplateType: String, Codable {
         case olmoe
         case phi3
+        case mediPhi
     }
 
     /// Returns the URL where the model file should be stored
@@ -51,7 +52,7 @@ enum AppConstants {
             filename: "MediPhi.i1-Q4_K_M",
             downloadURL: "https://huggingface.co/mradermacher/MediPhi-i1-GGUF/resolve/main/MediPhi.i1-Q4_K_M.gguf?download=true",
             downloadSize: "2.39 GB",
-            templateType: .phi3
+            templateType: .mediPhi
         )
 
         /// All available models

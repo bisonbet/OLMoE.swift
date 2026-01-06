@@ -53,18 +53,17 @@ open class LLM: ObservableObject {
         didSet {
             guard let template else {
                 preprocess = { input, _, _ in return input }
-                stopSequence = nil
-                stopSequenceLength = 0
+                stopSequences = []
+                stopSequenceLengths = []
                 return
             }
             preprocess = template.preprocess
-            if let stopSequence = template.stopSequence?.utf8CString {
-                self.stopSequence = stopSequence
-                stopSequenceLength = stopSequence.count - 1
-            } else {
-                stopSequence = nil
-                stopSequenceLength = 0
+            
+            stopSequences = template.stopSequences.map {
+                let cString = $0.utf8CString
+                return ContiguousArray(cString.dropLast())
             }
+            stopSequenceLengths = stopSequences.map { $0.count - 1 }
         }
     }
 
@@ -76,6 +75,9 @@ open class LLM: ObservableObject {
 
     /// Temperature parameter controlling randomness of sampling (higher = more random)
     public var temp: Float
+
+    /// Penalty for repeated tokens (1.0 = disabled, > 1.0 = penalized)
+    public var repeatPenalty: Float
 
     /// Path to the model file
     public var path: [CChar]
@@ -92,7 +94,7 @@ open class LLM: ObservableObject {
     /// Current generated output text
     @Published public private(set) var output = ""
     @MainActor public func setOutput(to newOutput: consuming String) {
-        output = newOutput.trimmingCharacters(in: .whitespaces)
+        output = newOutput
     }
 
     private var batch: llama_batch!
@@ -106,8 +108,8 @@ open class LLM: ObservableObject {
     private var multibyteCharacter: [CUnsignedChar] = []
     private var params: llama_context_params
     private var sampler: UnsafeMutablePointer<llama_sampler>?
-    private var stopSequence: ContiguousArray<CChar>?
-    private var stopSequenceLength: Int
+    private var stopSequences: [ContiguousArray<CChar>] = []
+    private var stopSequenceLengths: [Int] = []
     private let totalTokenCount: Int
     private var updateProgress: (Double) -> Void = { _ in }
     private var nPast: Int32 = 0 // Track number of tokens processed
@@ -115,12 +117,14 @@ open class LLM: ObservableObject {
 
     public init(
         from path: String,
+        stopSequences: [String] = [],
         stopSequence: String? = nil,
         history: [Chat] = [],
         seed: UInt32 = .random(in: .min ... .max),
         topK: Int32 = 40,
         topP: Float = 0.95,
         temp: Float = 0.8,
+        repeatPenalty: Float = 1.1,
         maxTokenCount: Int32 = 2048
     ) {
         self.path = path.cString(using: .utf8)!
@@ -140,12 +144,22 @@ open class LLM: ObservableObject {
         self.topK = topK
         self.topP = topP
         self.temp = temp
+        self.repeatPenalty = repeatPenalty
         self.model = model
         self.history = history
         self.totalTokenCount = Int(llama_vocab_n_tokens(llama_model_get_vocab(model)))
         self.newlineToken = model.newLineToken
-        self.stopSequence = stopSequence?.utf8CString
-        self.stopSequenceLength = (self.stopSequence?.count ?? 1) - 1
+        
+        var sequences = stopSequences
+        if let s = stopSequence, !sequences.contains(s) {
+            sequences.append(s)
+        }
+        self.stopSequences = sequences.map {
+            let cString = $0.utf8CString
+            return ContiguousArray(cString.dropLast())
+        }
+        self.stopSequenceLengths = self.stopSequences.map { $0.count - 1 }
+        
         self.batch = llama_batch_init(Int32(self.maxTokenCount), 0, 1)
 
         /// sampler to run with default parameters
@@ -155,6 +169,7 @@ open class LLM: ObservableObject {
         if let sampler = self.sampler {
             llama_sampler_chain_add(sampler, llama_sampler_init_top_k(topK))
             llama_sampler_chain_add(sampler, llama_sampler_init_top_p(topP, 1))
+            llama_sampler_chain_add(sampler, llama_sampler_init_penalties(64, repeatPenalty, 0.0, 0.0))
             llama_sampler_chain_add(sampler, llama_sampler_init_temp(temp))
             llama_sampler_chain_add(sampler, llama_sampler_init_dist(seed))
         }
@@ -172,16 +187,18 @@ open class LLM: ObservableObject {
         topK: Int32 = 40,
         topP: Float = 0.95,
         temp: Float = 0.8,
+        repeatPenalty: Float = 1.1,
         maxTokenCount: Int32 = 2048
     ) {
         self.init(
             from: url.path,
-            stopSequence: template.stopSequence,
+            stopSequences: template.stopSequences,
             history: history,
             seed: seed,
             topK: topK,
             topP: topP,
             temp: temp,
+            repeatPenalty: repeatPenalty,
             maxTokenCount: maxTokenCount
         )
         self.preprocess = template.preprocess
@@ -254,6 +271,7 @@ open class LLM: ObservableObject {
         guard self.inferenceTask != nil else { return false }
         guard !input.isEmpty else { return false }
         context = context ?? .init(model, params)
+        self.batch.clear()
         let tokens = encode(input)
         self.inputTokenCount = Int32(tokens.count)
 
@@ -281,7 +299,7 @@ open class LLM: ObservableObject {
     @InferenceActor
     private func emitDecoded(token: Token, to output: borrowing AsyncStream<String>.Continuation) -> Bool {
         struct saved {
-            static var stopSequenceEndIndex = 0
+            static var matchIndices: [Int] = []
             static var letters: [CChar] = []
         }
         guard self.inferenceTask != nil else { return false }
@@ -289,38 +307,61 @@ open class LLM: ObservableObject {
 
         let word = decode(token) /// Decode the token directly
 
-        guard let stopSequence else {
+        guard !stopSequences.isEmpty else {
             output.yield(word)
             return true
         }
 
-        /// Existing stop sequence handling logic
-        var found = 0 < saved.stopSequenceEndIndex
-        var letters: [CChar] = []
+        // Initialize or resize matchIndices if needed
+        if saved.matchIndices.count != stopSequences.count {
+            saved.matchIndices = Array(repeating: 0, count: stopSequences.count)
+        }
+
         for letter in word.utf8CString {
             guard letter != 0 else { break }
-            if letter == stopSequence[saved.stopSequenceEndIndex] {
-                saved.stopSequenceEndIndex += 1
-                found = true
-                saved.letters.append(letter)
-                guard saved.stopSequenceEndIndex == stopSequenceLength else { continue }
-                saved.stopSequenceEndIndex = 0
+            
+            var anyMatch = false
+            var fullMatch = false
+            
+            for (index, sequence) in stopSequences.enumerated() {
+                let matchIndex = saved.matchIndices[index]
+                if letter == sequence[matchIndex] {
+                    saved.matchIndices[index] += 1
+                    if saved.matchIndices[index] > stopSequenceLengths[index] {
+                        fullMatch = true
+                        break
+                    }
+                    anyMatch = true
+                } else {
+                    // Mismatch - reset and retry start
+                    saved.matchIndices[index] = 0
+                    if letter == sequence[0] {
+                        saved.matchIndices[index] = 1
+                        if 0 == stopSequenceLengths[index] {
+                            fullMatch = true
+                            break
+                        }
+                        anyMatch = true
+                    }
+                }
+            }
+            
+            if fullMatch {
+                saved.matchIndices = Array(repeating: 0, count: stopSequences.count)
                 saved.letters.removeAll()
                 return false
-            } else if found {
-                saved.stopSequenceEndIndex = 0
+            }
+            
+            if anyMatch {
+                saved.letters.append(letter)
+            } else {
                 if !saved.letters.isEmpty {
                     let prefix = String(cString: saved.letters + [0])
-                    output.yield(prefix + word)
+                    output.yield(prefix)
                     saved.letters.removeAll()
                 }
-                output.yield(word)
-                return true
+                output.yield(String(cString: [letter, 0]))
             }
-            letters.append(letter)
-        }
-        if !letters.isEmpty {
-            output.yield(found ? String(cString: letters + [0]) : word)
         }
         return true
     }
@@ -380,9 +421,9 @@ open class LLM: ObservableObject {
             Int32(self.maxTokenCount), -middle
         )
 
-        /// Update nPast
+        /// Update nPast to the next available position
         let kvCacheTokenCount: Int32 = llama_memory_seq_pos_max(memory, seq_id)
-        self.nPast = kvCacheTokenCount
+        self.nPast = kvCacheTokenCount + 1
         print("kv cache trimmed: llama_kv_cache(\(kvCacheTokenCount)    nPast(\(self.nPast))")
     }
 
@@ -444,7 +485,7 @@ open class LLM: ObservableObject {
     open func respond(to input: String) async {
         /// Restore the state before generating a response
         if let savedState = FeatureFlags.useLLMCaching ? self.savedState : nil {
-            restoreState(from: savedState)
+            await restoreState(from: savedState)
         }
 
         await performInference(to: input) { [self] response in
@@ -473,6 +514,7 @@ open class LLM: ObservableObject {
             let endIndex = self.nPast
             let memory = llama_get_memory(self.context.pointer)
             _ = llama_memory_seq_rm(memory, seq_id, startIndex, endIndex)
+            self.nPast = startIndex  // Update nPast to reflect the rollback
         }
     }
 
@@ -495,6 +537,7 @@ extension LLM {
     /// Saves the current model state
     /// - Returns: Data object containing serialized state, or nil if saving fails
     /// - Note: Used for continuing conversations across multiple interactions
+    @InferenceActor
     public func saveState() -> Data? {
         /// Ensure the context exists
         guard let contextPointer = self.context?.pointer else {
@@ -522,6 +565,7 @@ extension LLM {
 
     /// Restores a previously saved model state
     /// - Parameter stateData: Serialized state data from saveState()
+    @InferenceActor
     public func restoreState(from stateData: Data) {
         /// Ensure the context exists
         guard let contextPointer = self.context?.pointer else {
@@ -539,7 +583,8 @@ extension LLM {
 
         let beginningOfSequenceOffset: Int32 = 1
         let memory = llama_get_memory(self.context.pointer)
-        self.nPast = llama_memory_seq_pos_max(memory, 0) + beginningOfSequenceOffset
+        let maxPos = llama_memory_seq_pos_max(memory, 0)
+        self.nPast = maxPos + beginningOfSequenceOffset
     }
 }
 

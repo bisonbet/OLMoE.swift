@@ -12,7 +12,7 @@ import llama
 public class Context {
     let pointer: OpaquePointer
     init(_ model: Model, _ params: llama_context_params) {
-        self.pointer = llama_new_context_with_model(model, params)
+        self.pointer = llama_init_from_model(model, params)
     }
     deinit {
         llama_free(pointer)

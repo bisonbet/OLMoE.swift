@@ -34,13 +34,21 @@ class Bot: LLM {
 
         // Create appropriate template based on model type
         let template: Template
+        let repeatPenalty: Float
+        
         switch model.templateType {
         case .olmoe:
             let systemPrompt = "You are OLMoE (Open Language Mixture of Expert), a small language model running on \(deviceName). You have been developed at the Allen Institute for AI (Ai2) in Seattle, WA, USA. Today is \(currentDate). The time is \(currentTime)."
             template = .OLMoE(systemPrompt)
+            repeatPenalty = 1.1
         case .phi3:
             let systemPrompt = "You are MediPhi, a medical domain AI assistant running on \(deviceName). You provide helpful, accurate medical information while reminding users to consult healthcare professionals for medical advice. Today is \(currentDate). The time is \(currentTime)."
             template = .phi3(systemPrompt)
+            repeatPenalty = 1.1
+        case .mediPhi:
+            let systemPrompt = "You are MediPhi, a medical domain AI assistant running on \(deviceName). You provide helpful, accurate, and concise medical information while reminding users to consult healthcare professionals for medical advice. Today is \(currentDate). The time is \(currentTime)."
+            template = .mediPhi(systemPrompt)
+            repeatPenalty = 1.1
         }
 
         self.modelInfo = model
@@ -48,11 +56,12 @@ class Bot: LLM {
         // Call the designated initializer of LLM
         super.init(
             from: model.fileURL.path,
-            stopSequence: template.stopSequence,
+            stopSequences: template.stopSequences,
             history: [],
             topK: 40,
             topP: 0.95,
             temp: 0.8,
+            repeatPenalty: repeatPenalty,
             maxTokenCount: 2048
         )
 
@@ -141,7 +150,9 @@ struct BotView: View {
 
     func stop() {
         self.stopSubmitted = true
-        bot.stop()
+        Task {
+            await bot.stop()
+        }
     }
 
     func deleteHistory() {
@@ -158,7 +169,7 @@ struct BotView: View {
         let modelName = bot.modelInfo.displayName
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "MMMM d, yyyy 'at' h:mm a"
-        let timestamp = dateFormatter.string(from: Date())
+        // timestamp unused
 
         let header = """
         Conversation with \(modelName)
@@ -475,12 +486,12 @@ struct ContentView: View {
                         ModelDownloadView()
                     }
                 }
-                .onChange(of: downloadManager.isModelReady) { newValue in
+                .onChange(of: downloadManager.isModelReady) { _, newValue in
                     if newValue && bot == nil {
                         initializeBot()
                     }
                 }
-                .onChange(of: downloadManager.selectedModel) { newModel in
+                .onChange(of: downloadManager.selectedModel) { _, newModel in
                     // Reinitialize bot when user selects a different model
                     if downloadManager.isModelReady && newModel.isDownloaded {
                         if bot?.modelInfo.id != newModel.id {

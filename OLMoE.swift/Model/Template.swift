@@ -26,8 +26,11 @@ public struct Template {
     /// Optional system prompt to set context for the conversation
     public let systemPrompt: String?
 
-    /// Sequence that indicates the end of the model's response
-    public let stopSequence: String?
+    /// Sequences that indicate the end of the model's response
+    public let stopSequences: [String]
+
+    /// Legacy accessor for the first stop sequence
+    public var stopSequence: String? { stopSequences.first }
 
     /// Text to prepend to the entire conversation
     public let prefix: String
@@ -41,7 +44,8 @@ public struct Template {
     ///   - system: Formatting for system messages
     ///   - user: Formatting for user messages
     ///   - bot: Formatting for bot/assistant messages
-    ///   - stopSequence: Sequence indicating end of response
+    ///   - stopSequence: Primary stop sequence (legacy)
+    ///   - stopSequences: List of sequences indicating end of response
     ///   - systemPrompt: Initial system message for context
     ///   - shouldDropLast: Whether to drop last character of bot prefix
     public init(
@@ -50,13 +54,20 @@ public struct Template {
         user: Attachment? = nil,
         bot: Attachment? = nil,
         stopSequence: String? = nil,
+        stopSequences: [String] = [],
         systemPrompt: String?,
         shouldDropLast: Bool = false
     ) {
         self.system = system ?? ("", "")
         self.user = user  ?? ("", "")
         self.bot = bot ?? ("", "")
-        self.stopSequence = stopSequence
+        
+        var sequences = stopSequences
+        if let single = stopSequence, !sequences.contains(single) {
+            sequences.insert(single, at: 0)
+        }
+        self.stopSequences = sequences
+        
         self.systemPrompt = systemPrompt
         self.prefix = prefix
         self.shouldDropLast = shouldDropLast
@@ -178,6 +189,19 @@ public struct Template {
             user: ("<|user|>\n", "<|end|>\n"),
             bot: ("<|assistant|>\n", "<|end|>\n"),
             stopSequence: "<|end|>",
+            systemPrompt: systemPrompt
+        )
+    }
+
+    /// Creates a template for MediPhi models (Phi-3 based with custom end marker)
+    /// - Parameter systemPrompt: Optional system message for context
+    /// - Returns: Template configured for MediPhi format
+    public static func mediPhi(_ systemPrompt: String? = nil) -> Template {
+        return Template(
+            system: ("<|system|>\n", "<|end|>\n"),
+            user: ("<|user|>\n", "<|end|>\n"),
+            bot: ("<|assistant|>\n", "<|end|>\n"),
+            stopSequences: ["<|end|>", "<|end of", "<|end of the document|>", "<|user|>", "<|system|>", "###", "## Instruction"],
             systemPrompt: systemPrompt
         )
     }
